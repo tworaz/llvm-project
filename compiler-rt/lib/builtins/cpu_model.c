@@ -31,7 +31,11 @@
      defined(_M_X64)) &&                                                       \
     (defined(__GNUC__) || defined(__clang__) || defined(_MSC_VER))
 
+#ifndef __GENODE__
 #include <assert.h>
+#else
+#define assert(cond) ((void)0)
+#endif
 
 #define bool int
 #define true 1
@@ -803,6 +807,7 @@ _Bool __aarch64_have_lse_atomics
 #include <sys/system_properties.h>
 #endif
 static void CONSTRUCTOR_ATTRIBUTE init_have_lse_atomics(void) {
+#if !defined(__GENODE__)
 #if defined(__FreeBSD__)
   unsigned long hwcap;
   int result = elf_aux_info(AT_HWCAP, &hwcap, sizeof hwcap);
@@ -823,6 +828,7 @@ static void CONSTRUCTOR_ATTRIBUTE init_have_lse_atomics(void) {
 #endif // defined(__ANDROID__)
   __aarch64_have_lse_atomics = result;
 #endif // defined(__FreeBSD__)
+#endif // !defined(__GENODE__)
 }
 #endif // defined(__has_include)
 #endif // __has_include(<sys/auxv.h>)

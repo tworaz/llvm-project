@@ -471,7 +471,7 @@ fp16_fml_fallthrough:
       if (!ForAS)
         CmdArgs.push_back("-Wunaligned-access");
     }
-  } else if (Triple.isOSOpenBSD()) {
+  } else if (Triple.isOSOpenBSD() || Triple.isOSGenode()) {
     Features.push_back("+strict-align");
     if (!ForAS)
       CmdArgs.push_back("-Wunaligned-access");

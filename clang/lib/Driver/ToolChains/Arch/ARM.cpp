@@ -813,7 +813,7 @@ fp16_fml_fallthrough:
           CmdArgs.push_back("-Wunaligned-access");
       }
     } else if (Triple.isOSLinux() || Triple.isOSNaCl() ||
-               Triple.isOSWindows()) {
+               Triple.isOSWindows() || Triple.isOSGenode()) {
       if (VersionNum < 7) {
         Features.push_back("+strict-align");
         if (!ForAS)
