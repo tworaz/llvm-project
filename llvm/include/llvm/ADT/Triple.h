@@ -170,6 +170,7 @@ public:
     DragonFly,
     FreeBSD,
     Fuchsia,
+    Genode,
     IOS,
     KFreeBSD,
     Linux,
@@ -599,6 +600,11 @@ public:
   /// Tests whether the OS is kFreeBSD.
   bool isOSKFreeBSD() const {
     return getOS() == Triple::KFreeBSD;
+  }
+
+  /// Tests whether the OS is Genode.
+  bool isOSGenode() const {
+    return getOS() == Triple::Genode;
   }
 
   /// Tests whether the OS is Hurd.

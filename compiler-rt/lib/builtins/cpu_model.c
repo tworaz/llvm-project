@@ -799,8 +799,10 @@ _Bool __aarch64_have_lse_atomics
 #define HWCAP_ATOMICS (1 << 8)
 #endif
 static void CONSTRUCTOR_ATTRIBUTE init_have_lse_atomics(void) {
+#ifndef __GENODE__
   unsigned long hwcap = getauxval(AT_HWCAP);
   __aarch64_have_lse_atomics = (hwcap & HWCAP_ATOMICS) != 0;
+#endif
 }
 #endif // defined(__has_include)
 #endif // __has_include(<sys/auxv.h>)

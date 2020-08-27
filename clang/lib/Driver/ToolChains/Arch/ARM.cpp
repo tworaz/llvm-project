@@ -789,7 +789,7 @@ fp16_fml_fallthrough:
           Triple.getSubArch() == llvm::Triple::SubArchType::ARMSubArch_v6m)
         Features.push_back("+strict-align");
     } else if (Triple.isOSLinux() || Triple.isOSNaCl() ||
-               Triple.isOSWindows()) {
+               Triple.isOSWindows() || Triple.isOSGenode()) {
       if (VersionNum < 7)
         Features.push_back("+strict-align");
     } else
