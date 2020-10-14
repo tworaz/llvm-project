@@ -341,7 +341,7 @@ namespace llvm {
 
   /// createDwarfEHPass - This pass mulches exception handling code into a form
   /// adapted to code generation.  Required if using dwarf exception handling.
-  FunctionPass *createDwarfEHPass(CodeGenOpt::Level OptLevel);
+  FunctionPass *createDwarfEHPass(CodeGenOpt::Level OptLevel, bool UseCxaEndCleanup);
 
   /// createWinEHPass - Prepares personality functions used by MSVC on Windows,
   /// in addition to the Itanium LSDA based personalities.

@@ -49,10 +49,18 @@ namespace {
     FunctionCallee RewindFunction = nullptr;
 
     CodeGenOpt::Level OptLevel;
+    const bool IsArmEHABI;
     DominatorTree *DT = nullptr;
     const TargetLowering *TLI = nullptr;
 
-    bool InsertUnwindResumeCalls(Function &Fn);
+    bool GetResumesVector(SmallVector<ResumeInst*, 16>&);
+    bool InsertABIResumeCall(Function &Fn);
+    bool InsertUnwindResumeCalls(Function &Fn,
+                                 SmallVector<ResumeInst*, 16> &Resumes,
+                                 size_t ResumesLeft);
+    bool InsertCxaEndCleanupCalls(Function &Fn,
+                                  SmallVector<ResumeInst*, 16> &Resumes,
+                                  size_t ResumesLeft);
     Value *GetExceptionObject(ResumeInst *RI);
     size_t
     pruneUnreachableResumes(Function &Fn,
@@ -62,8 +70,10 @@ namespace {
   public:
     static char ID; // Pass identification, replacement for typeid.
 
-    DwarfEHPrepare(CodeGenOpt::Level OptLevel = CodeGenOpt::Default)
-      : FunctionPass(ID), OptLevel(OptLevel) {}
+    DwarfEHPrepare(CodeGenOpt::Level OptLevel = CodeGenOpt::Default,
+                   bool IsArmEHABI = false)
+      : FunctionPass(ID), OptLevel(OptLevel),
+        IsArmEHABI(IsArmEHABI) {}
 
     bool runOnFunction(Function &Fn) override;
 
@@ -91,8 +101,9 @@ INITIALIZE_PASS_DEPENDENCY(TargetTransformInfoWrapperPass)
 INITIALIZE_PASS_END(DwarfEHPrepare, DEBUG_TYPE,
                     "Prepare DWARF exceptions", false, false)
 
-FunctionPass *llvm::createDwarfEHPass(CodeGenOpt::Level OptLevel) {
-  return new DwarfEHPrepare(OptLevel);
+FunctionPass *llvm::createDwarfEHPass(CodeGenOpt::Level OptLevel,
+                                      bool IsArmEHABI) {
+  return new DwarfEHPrepare(OptLevel, IsArmEHABI);
 }
 
 void DwarfEHPrepare::getAnalysisUsage(AnalysisUsage &AU) const {
@@ -184,9 +195,9 @@ size_t DwarfEHPrepare::pruneUnreachableResumes(
   return ResumesLeft;
 }
 
-/// InsertUnwindResumeCalls - Convert the ResumeInsts that are still present
-/// into calls to the appropriate _Unwind_Resume function.
-bool DwarfEHPrepare::InsertUnwindResumeCalls(Function &Fn) {
+/// InsertABIResumeCall - Convert the ResumeInsts that are still present
+/// into calls to the appropriate exception resume function.
+bool DwarfEHPrepare::InsertABIResumeCall(Function &Fn) {
   SmallVector<ResumeInst*, 16> Resumes;
   SmallVector<LandingPadInst*, 16> CleanupLPads;
   for (BasicBlock &BB : Fn) {
@@ -205,14 +216,25 @@ bool DwarfEHPrepare::InsertUnwindResumeCalls(Function &Fn) {
   if (isScopedEHPersonality(Pers))
     return false;
 
-  LLVMContext &Ctx = Fn.getContext();
-
   size_t ResumesLeft = Resumes.size();
   if (OptLevel != CodeGenOpt::None)
     ResumesLeft = pruneUnreachableResumes(Fn, Resumes, CleanupLPads);
 
   if (ResumesLeft == 0)
     return true; // We pruned them all.
+
+  const bool useCxaEndCleanup =
+      (Pers == EHPersonality::GNU_CXX) & IsArmEHABI;
+  if (useCxaEndCleanup)
+    return InsertCxaEndCleanupCalls(Fn, Resumes, ResumesLeft);
+  return InsertUnwindResumeCalls(Fn, Resumes, ResumesLeft);
+}
+
+/// InsertUnwindResumeCalls - Convert the ResumeInsts that are still present
+/// into calls to the appropriate _Unwind_Resume function.
+bool DwarfEHPrepare::InsertUnwindResumeCalls(
+    Function &Fn, SmallVector<ResumeInst*, 16> &Resumes, size_t ResumesLeft) {
+  LLVMContext &Ctx = Fn.getContext();
 
   // Find the rewind function if we didn't already.
   if (!RewindFunction) {
@@ -264,13 +286,61 @@ bool DwarfEHPrepare::InsertUnwindResumeCalls(Function &Fn) {
   return true;
 }
 
+bool DwarfEHPrepare::InsertCxaEndCleanupCalls(
+    Function &Fn, SmallVector<ResumeInst*, 16> &Resumes,
+    size_t ResumesLeft) {
+  LLVMContext &Ctx = Fn.getContext();
+
+  if (!RewindFunction) {
+    FunctionType *FTy = FunctionType::get(Type::getVoidTy(Ctx), false);
+    const char *RewindName = TLI->getLibcallName(RTLIB::CXA_END_CLEANUP);
+    RewindFunction = Fn.getParent()->getOrInsertFunction(RewindName, FTy);
+  }
+
+  // Create the basic block where the __cxa_end_cleanup call will live.
+  if (ResumesLeft == 1) {
+    // Instead of creating a new BB just append the call to
+    // __cxa_end_cleanup to the end of the single resume block.
+    ResumeInst *RI = Resumes.front();
+    BasicBlock *UnwindBB = RI->getParent();
+
+    RI->eraseFromParent();
+
+    // Call the __cxa_end_cleanup function.
+    CallInst *CI = CallInst::Create(RewindFunction, "", UnwindBB);
+    CI->setCallingConv(TLI->getLibcallCallingConv(RTLIB::CXA_END_CLEANUP));
+
+    // We never expect _Unwind_Resume to return.
+    new UnreachableInst(Ctx, UnwindBB);
+    return true;
+  }
+
+  BasicBlock *UnwindBB = BasicBlock::Create(Ctx, "unwind_resume", &Fn);
+
+  for (ResumeInst *RI : Resumes) {
+    BasicBlock *Parent = RI->getParent();
+    BranchInst::Create(UnwindBB, Parent);
+
+    RI->eraseFromParent();
+
+    ++NumResumesLowered;
+  }
+
+  CallInst *CI = CallInst::Create(RewindFunction,  "", UnwindBB);
+  CI->setCallingConv(TLI->getLibcallCallingConv(RTLIB::CXA_END_CLEANUP));
+
+  // We never expect __cxa_end_cleanup to return.
+  new UnreachableInst(Ctx, UnwindBB);
+  return true;
+}
+
 bool DwarfEHPrepare::runOnFunction(Function &Fn) {
   const TargetMachine &TM =
       getAnalysis<TargetPassConfig>().getTM<TargetMachine>();
   DT = OptLevel != CodeGenOpt::None
       ? &getAnalysis<DominatorTreeWrapperPass>().getDomTree() : nullptr;
   TLI = TM.getSubtargetImpl(Fn)->getTargetLowering();
-  bool Changed = InsertUnwindResumeCalls(Fn);
+  bool Changed = InsertABIResumeCall(Fn);
   DT = nullptr;
   TLI = nullptr;
   return Changed;

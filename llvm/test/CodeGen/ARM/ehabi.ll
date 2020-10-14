@@ -181,10 +181,10 @@ declare void @_ZSt9terminatev()
 
 ; CHECK-V7-FP-LABEL: _Z4testiiiiiddddd:
 ; CHECK-V7-FP:   .fnstart
-; CHECK-V7-FP:   .save  {r4, r10, r11, lr}
-; CHECK-V7-FP:   push   {r4, r10, r11, lr}
-; CHECK-V7-FP:   .setfp r11, sp, #8
-; CHECK-V7-FP:   add    r11, sp, #8
+; CHECK-V7-FP:   .save  {r11, lr}
+; CHECK-V7-FP:   push   {r11, lr}
+; CHECK-V7-FP:   .setfp r11, sp
+; CHECK-V7-FP:   mov    r11, sp
 ; CHECK-V7-FP:   .vsave {d8, d9, d10, d11, d12}
 ; CHECK-V7-FP:   vpush  {d8, d9, d10, d11, d12}
 ; CHECK-V7-FP:   .pad   #24
@@ -195,8 +195,8 @@ declare void @_ZSt9terminatev()
 
 ; CHECK-V7-FP-ELIM-LABEL: _Z4testiiiiiddddd:
 ; CHECK-V7-FP-ELIM:   .fnstart
-; CHECK-V7-FP-ELIM:   .save  {r4, lr}
-; CHECK-V7-FP-ELIM:   push   {r4, lr}
+; CHECK-V7-FP-ELIM:   .save  {r11, lr}
+; CHECK-V7-FP-ELIM:   push   {r11, lr}
 ; CHECK-V7-FP-ELIM:   .vsave {d8, d9, d10, d11, d12}
 ; CHECK-V7-FP-ELIM:   vpush  {d8, d9, d10, d11, d12}
 ; CHECK-V7-FP-ELIM:   .pad   #24
