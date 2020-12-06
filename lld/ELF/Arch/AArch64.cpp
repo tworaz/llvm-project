@@ -35,6 +35,7 @@ public:
                      const uint8_t *loc) const override;
   RelType getDynRel(RelType type) const override;
   int64_t getImplicitAddend(const uint8_t *buf, RelType type) const override;
+  void writeGotHeader(uint8_t *buf) const override;
   void writeGotPlt(uint8_t *buf, const Symbol &s) const override;
   void writePltHeader(uint8_t *buf) const override;
   void writePlt(uint8_t *buf, const Symbol &sym,
@@ -70,6 +71,9 @@ AArch64::AArch64() {
   pltEntrySize = 16;
   ipltEntrySize = 16;
   defaultMaxPageSize = 65536;
+
+  // .got[0] = _DYNAMIC
+  gotHeaderEntriesNum = 1;
 
   // Align to the 2 MiB page size (known as a superpage or huge page).
   // FreeBSD automatically promotes 2 MiB-aligned allocations.
@@ -202,6 +206,10 @@ int64_t AArch64::getImplicitAddend(const uint8_t *buf, RelType type) const {
                         "cannot read addend for relocation " + toString(type));
     return 0;
   }
+}
+
+void AArch64::writeGotHeader(uint8_t *buf) const {
+  write64le(buf, mainPart->dynamic->getVA());
 }
 
 void AArch64::writeGotPlt(uint8_t *buf, const Symbol &) const {
