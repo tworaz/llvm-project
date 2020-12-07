@@ -217,6 +217,10 @@ static bool isRelExpr(RelExpr expr) {
                R_RISCV_PC_INDIRECT, R_PPC64_RELAX_GOT_PC>(expr);
 }
 
+static bool isGotRelExpr(RelExpr expr) {
+  return expr == R_AARCH64_GOT_PAGE_PC;
+}
+
 // Returns true if a given relocation can be computed at link-time.
 //
 // For instance, we know the offset from a relocation to its target at
@@ -908,7 +912,7 @@ static void addPltEntry(PltSection *plt, GotPltSection *gotPlt,
                  sym, 0, R_ABS});
 }
 
-static void addGotEntry(Symbol &sym) {
+static void addGotEntry(Symbol &sym, RelExpr sym_expr) {
   in.got->addEntry(sym);
   uint64_t off = sym.getGotOffset();
 
@@ -921,7 +925,11 @@ static void addGotEntry(Symbol &sym) {
 
   // Otherwise, the value is either a link-time constant or the load base
   // plus a constant.
-  if (!config->isPic || isAbsolute(sym))
+  // If the relocation procues a constant lets include its pre-calculated,
+  // initial value in .got and also add a .rel[a].dyn load-time relocation
+  // for it. Such initial, pre-calculated value should be valid if the ELF
+  // file is not loaded at a random offset. This mimics BFD linker behavior.
+  if (!config->isPic || isAbsolute(sym) || isGotRelExpr(sym_expr))
     in.got->relocations.push_back({R_ABS, target->symbolicRel, off, 0, &sym});
   else
     addRelativeReloc(in.got, off, sym, 0, R_ABS, target->symbolicRel);
@@ -1453,7 +1461,7 @@ static void scanReloc(InputSectionBase &sec, OffsetGetter &getOffset, RelTy *&i,
         // ftp://www.linux-mips.org/pub/linux/mips/doc/ABI/mipsabi.pdf
         in.mipsGot->addEntry(*sec.file, sym, addend, expr);
       } else if (!sym.isInGot()) {
-        addGotEntry(sym);
+        addGotEntry(sym, expr);
       }
     }
   } else {
@@ -1541,7 +1549,7 @@ static void scanReloc(InputSectionBase &sec, OffsetGetter &getOffset, RelTy *&i,
         // We don't need to worry about creating a MIPS GOT here because ifuncs
         // aren't a thing on MIPS.
         sym.gotInIgot = false;
-        addGotEntry(sym);
+        addGotEntry(sym, expr);
       }
     }
   }
