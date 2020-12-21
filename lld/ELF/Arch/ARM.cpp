@@ -32,6 +32,7 @@ public:
   int64_t getImplicitAddend(const uint8_t *buf, RelType type) const override;
   void writeGotPlt(uint8_t *buf, const Symbol &s) const override;
   void writeIgotPlt(uint8_t *buf, const Symbol &s) const override;
+  void writeGotHeader(uint8_t *buf) const override;
   void writePltHeader(uint8_t *buf) const override;
   void writePlt(uint8_t *buf, const Symbol &sym,
                 uint64_t pltEntryAddr) const override;
@@ -57,6 +58,7 @@ ARM::ARM() {
   tlsGotRel = R_ARM_TLS_TPOFF32;
   tlsModuleIndexRel = R_ARM_TLS_DTPMOD32;
   tlsOffsetRel = R_ARM_TLS_DTPOFF32;
+  gotHeaderEntriesNum = 1;
   pltHeaderSize = 32;
   pltEntrySize = 16;
   ipltEntrySize = 16;
@@ -191,6 +193,10 @@ static void writePltHeaderLong(uint8_t *buf) {
   uint64_t gotPlt = in.gotPlt->getVA();
   uint64_t l1 = in.plt->getVA() + 8;
   write32le(buf + 16, gotPlt - l1 - 8);
+}
+
+void ARM::writeGotHeader(uint8_t *buf) const {
+  write32le(buf, mainPart->dynamic->getVA());
 }
 
 // The default PLT header requires the .plt.got to be within 128 Mb of the
